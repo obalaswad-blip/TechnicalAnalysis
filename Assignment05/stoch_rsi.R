@@ -1,20 +1,48 @@
+
 stoch_rsi <- function(data, period, k_period, d_period) {
-  if (any(c(k_period, d_period) < 1) || any(c(k_period, d_period) != as.integer(c(k_period, d_period)))) stop("Periods must be positive integers")
+
+  # Calculate RSI
   rsi_values <- rsi(data, period)
-  valid <- rsi_values[!is.na(rsi_values)]
-  if (length(valid) < k_period + d_period - 1) stop("Not enough RSI values for K and D periods")
-  # Rolling StochRSI, aligned to source observations. Flat RSI windows are set to zero.
-  raw_k <- rep(NA_real_, length(data))
-  for (i in (period + k_period):length(data)) {
-    window <- rsi_values[(i - k_period + 1):i]
-    low <- min(window); high <- max(window)
-    raw_k[i] <- if (high == low) 0 else (rsi_values[i] - low) / (high - low)
+
+  # Remove unavailable initial RSI values
+  valid_rsi <- rsi_values[!is.na(rsi_values)]
+
+  if (length(valid_rsi) < k_period + d_period - 1) {
+    stop("Not enough data for Stochastic RSI")
   }
-  # k_period is the RSI normalization window; d_period smooths that K line.
-  k_line <- raw_k
+
+  # Calculate normalized RSI values
+  min_rsi <- min(valid_rsi)
+  max_rsi <- max(valid_rsi)
+
+  if (max_rsi == min_rsi) {
+    k_values <- rep(0, length(valid_rsi))
+  } else {
+    k_values <- (valid_rsi - min_rsi) /
+                (max_rsi - min_rsi)
+  }
+
+  # Calculate K using Simple Moving Average
+  k_smoothed <- sma(k_values, k_period)
+
+  # Calculate D using Simple Moving Average
+  d_smoothed <- sma(k_smoothed, d_period)
+
+  # Align results with the original data
+  k_line <- rep(NA_real_, length(data))
   d_line <- rep(NA_real_, length(data))
-  start <- period + k_period + d_period - 1
-  if (start <= length(data)) for (i in start:length(data)) d_line[i] <- sum(k_line[(i - d_period + 1):i]) / d_period
-  result <- list(k_line = k_line, d_line = d_line)
+
+  k_start <- period + k_period
+  d_start <- k_start + d_period - 1
+
+  k_line[k_start:length(data)] <- k_smoothed
+  d_line[d_start:length(data)] <- d_smoothed
+
+  # Return results
+  result <- list(
+    k_line = k_line,
+    d_line = d_line
+  )
+
   return(result)
 }
